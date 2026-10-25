@@ -8,6 +8,7 @@ pipeline {
 
     environment {
         APP_IMAGE = 'online-learning-platform'
+        DOCKERHUB_REPO = 'samsharma05/online-learning-platform'
         APP1 = '23.100.94.108'
         APP2 = '23.100.94.79'
         SSH_USER = 'samadmin'
@@ -44,6 +45,40 @@ pipeline {
             }
         }
 
+        stage('Push Image to Docker Hub') {
+            steps {
+                withCredentials([
+                    usernamePassword(
+                        credentialsId: 'dockerhub-creds',
+                        usernameVariable: 'DOCKERHUB_USER',
+                        passwordVariable: 'DOCKERHUB_TOKEN'
+                    )
+                ]) {
+                    sh '''
+                        set -eu
+                        set +x
+
+                        trap 'docker logout >/dev/null 2>&1 || true' EXIT
+
+                        docker login \
+                            --username "$DOCKERHUB_USER" \
+                            --password-stdin <<< "$DOCKERHUB_TOKEN"
+
+                        docker tag \
+                            "${APP_IMAGE}:${BUILD_NUMBER}" \
+                            "${DOCKERHUB_REPO}:${BUILD_NUMBER}"
+
+                        docker tag \
+                            "${APP_IMAGE}:${BUILD_NUMBER}" \
+                            "${DOCKERHUB_REPO}:latest"
+
+                        docker push "${DOCKERHUB_REPO}:${BUILD_NUMBER}"
+                        docker push "${DOCKERHUB_REPO}:latest"
+                    '''
+                }
+            }
+        }
+
         stage('Deploy to App Servers') {
             steps {
                 sh '''
@@ -56,7 +91,7 @@ pipeline {
                             "$SSH_USER@$HOST" \
                             "sudo docker load -i /tmp/app-image.tar &&
                              sudo docker rm -f online-learning-platform 2>/dev/null || true"
-                        
+
                         ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no \
                             "$SSH_USER@$HOST" \
                             "sudo docker run -d --name online-learning-platform \
