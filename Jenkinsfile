@@ -38,9 +38,9 @@ pipeline {
                 sh '''
                     set -eu
                     printf 'FROM nginx:alpine\\nCOPY index.html /usr/share/nginx/html/index.html\\n' > Dockerfile
-                    docker build -t ${APP_IMAGE}:${BUILD_NUMBER} .
-                    timeout 60s docker save ${APP_IMAGE}:${BUILD_NUMBER} -o app-image.tar
-                    test -s app-image.tar
+                    docker build -t "${APP_IMAGE}:${BUILD_NUMBER}" .
+                    docker tag "${APP_IMAGE}:${BUILD_NUMBER}" "${DOCKERHUB_REPO}:${BUILD_NUMBER}"
+                    docker tag "${APP_IMAGE}:${BUILD_NUMBER}" "${DOCKERHUB_REPO}:latest"
                 '''
             }
         }
@@ -57,20 +57,11 @@ pipeline {
                     sh '''
                         set -eu
                         set +x
-
                         trap 'docker logout >/dev/null 2>&1 || true' EXIT
 
                         printf '%s' "$DOCKERHUB_TOKEN" | docker login \
                             --username "$DOCKERHUB_USER" \
                             --password-stdin
-
-                        docker tag \
-                            "${APP_IMAGE}:${BUILD_NUMBER}" \
-                            "${DOCKERHUB_REPO}:${BUILD_NUMBER}"
-
-                        docker tag \
-                            "${APP_IMAGE}:${BUILD_NUMBER}" \
-                            "${DOCKERHUB_REPO}:latest"
 
                         docker push "${DOCKERHUB_REPO}:${BUILD_NUMBER}"
                         docker push "${DOCKERHUB_REPO}:latest"
@@ -84,19 +75,13 @@ pipeline {
                 sh '''
                     set -eu
                     for HOST in "$APP1" "$APP2"; do
-                        scp -i "$SSH_KEY" -o StrictHostKeyChecking=no \
-                            app-image.tar "$SSH_USER@$HOST:/tmp/app-image.tar"
-
                         ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no \
                             "$SSH_USER@$HOST" \
-                            "sudo docker load -i /tmp/app-image.tar &&
-                             sudo docker rm -f online-learning-platform 2>/dev/null || true"
-
-                        ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no \
-                            "$SSH_USER@$HOST" \
-                            "sudo docker run -d --name online-learning-platform \
+                            "sudo docker pull ${DOCKERHUB_REPO}:${BUILD_NUMBER} &&
+                             (sudo docker rm -f online-learning-platform >/dev/null 2>&1 || true) &&
+                             sudo docker run -d --name online-learning-platform \
                              --restart unless-stopped -p 80:80 \
-                             ${APP_IMAGE}:${BUILD_NUMBER}"
+                             ${DOCKERHUB_REPO}:${BUILD_NUMBER}"
                     done
                 '''
             }
@@ -117,9 +102,6 @@ pipeline {
     }
 
     post {
-        always {
-            sh 'rm -f app-image.tar'
-        }
         success {
             echo 'CI/CD pipeline completed successfully.'
         }
