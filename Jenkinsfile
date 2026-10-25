@@ -38,7 +38,8 @@ pipeline {
                     set -eu
                     printf 'FROM nginx:alpine\\nCOPY index.html /usr/share/nginx/html/index.html\\n' > Dockerfile
                     docker build -t ${APP_IMAGE}:${BUILD_NUMBER} .
-                    docker save ${APP_IMAGE}:${BUILD_NUMBER} -o app-image.tar
+                    timeout 60s docker save ${APP_IMAGE}:${BUILD_NUMBER} -o app-image.tar
+                    test -s app-image.tar
                 '''
             }
         }
