@@ -60,9 +60,9 @@ pipeline {
 
                         trap 'docker logout >/dev/null 2>&1 || true' EXIT
 
-                        docker login \
+                        printf '%s' "$DOCKERHUB_TOKEN" | docker login \
                             --username "$DOCKERHUB_USER" \
-                            --password-stdin <<< "$DOCKERHUB_TOKEN"
+                            --password-stdin
 
                         docker tag \
                             "${APP_IMAGE}:${BUILD_NUMBER}" \
